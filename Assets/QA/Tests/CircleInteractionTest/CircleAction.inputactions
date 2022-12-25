@@ -11,7 +11,7 @@
                     "id": "38b8f187-ed24-472e-bbd4-5733060330f2",
                     "expectedControlType": "Button",
                     "processors": "",
-                    "interactions": "Circle",
+                    "interactions": "Circle(duration=0.5,pressPoint=1)",
                     "initialStateCheck": true
                 }
             ],
