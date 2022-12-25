@@ -2,6 +2,8 @@ using System.ComponentModel;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.Scripting;
 using System.Collections.Generic;
+using System;
+using System.Linq;
 #if UNITY_EDITOR
 using UnityEngine.InputSystem.Editor;
 using UnityEditor;
@@ -33,7 +35,7 @@ namespace UnityEngine.InputSystem.Interactions
     #endif
 
     [DisplayName("Circle")]
-    public class CircleInteraction : IInputInteraction
+    public class CircleInteraction : IInputInteraction//<Vector2>
     {
         /// <summary>
         /// Duration in seconds that the control must be pressed for the hold to register.
@@ -60,53 +62,113 @@ namespace UnityEngine.InputSystem.Interactions
         private float pressPointOrDefault => pressPoint > 0.0 ? pressPoint : ButtonControl.s_GlobalDefaultButtonPressPoint;
 
         private double m_TimePressed;
+
+        /// <summary>
+        /// List build when the interaction is started and register all the position of the device (mouse). This position will then be analysed to check if it form a circle
+        /// </summary>
         private List<Vector2> m_ListPositionsOverTime;
 
-        /// <inheritdoc />
-        public void Process(ref InputInteractionContext context)
-        {
-            if (context.timerHasExpired)
-            {
-                context.PerformedAndStayPerformed();
-                return;
-            }
+        private bool m_hasStarted;
 
-            switch (context.phase)
+        private InputInteractionContext latestContext;
+
+        private void OnUpdate()
+        {
+            var listControls = latestContext.control.device.allControls.ToList();
+            Vector2Control controlPosition = listControls.Find(ctr => ctr.valueType == typeof(Vector2)) as Vector2Control;
+
+            Debug.Log(controlPosition.x.ReadValue() + " , " + controlPosition.y.ReadValue());
+
+        }
+
+       /// <inheritdoc />
+       public void Process(ref InputInteractionContext context)
+        {
+            Debug.Log("PROCESS");
+            m_hasStarted = false;
+
+            latestContext = context;
+
+            //Get control from context that store the mouse or stick position 
+            //TODO : find a safer version that find the right element event the device has multiple control returning Vector2 as value
+            //or use a Dictionnary of Control/List<Vector2> to trqck qll control using vector 2 and check if at least one is making a circle
+            var listControls = latestContext.control.device.allControls.ToList();
+            Vector2Control controlPosition = listControls.Find(ctr => ctr.valueType == typeof(Vector2)) as Vector2Control;
+
+            switch (latestContext.phase)
             {
                 case InputActionPhase.Waiting:
+                    Debug.Log("WAITING");
                     if (context.ControlIsActuated(pressPointOrDefault))
                     {
-                        m_TimePressed = context.time;
+                        m_hasStarted = true;
 
-                        context.Started();
-                        context.SetTimeout(durationOrDefault);
+                        if (m_ListPositionsOverTime == null)
+                        {
+                            m_ListPositionsOverTime = new List<Vector2>();
+                        }
+                    }
+
+                    if (m_hasStarted)
+                    {
+                        if (!latestContext.ControlIsActuated())
+                        {
+                            Debug.Log("WAITING : STOP USING");
+                            latestContext.Canceled();
+                            m_ListPositionsOverTime = null;
+                        }
+
+
+                        m_ListPositionsOverTime.Add(new Vector2(controlPosition.x.ReadValue(), controlPosition.y.ReadValue()));
+                        if (latestContext.time - m_TimePressed >= durationOrDefault)
+                        {
+                            latestContext.Started();
+                        }
                     }
                     break;
 
                 case InputActionPhase.Started:
-
-                    //TODO : Get current Position and register it into m_ListPositionsOverTime
+                    Debug.Log("START USING");
+                    //TODO : Get value from current controlPosition and add it to m_ListPositionsOverTime
+                   
+                    m_ListPositionsOverTime.Add(new Vector2(controlPosition.x.ReadValue(), controlPosition.y.ReadValue()));
+                    //Debug.Log(controlPosition.x.ReadValue() + " , " + controlPosition.y.ReadValue()+" size: "+ m_ListPositionsOverTime.Count);
 
                     //TODO : Condition to check if all registered positions form a circle
-                    if (context.time - m_TimePressed >= durationOrDefault)
+                    if(IsACircle(m_ListPositionsOverTime))
                     {
-                        context.PerformedAndStayPerformed();
+                        latestContext.PerformedAndStayPerformed();
                     }
 
-
                     // ControlIsActuted indicate is the control is currently used (ie. button pressed, stick not in its initial position,...)
-                    if (!context.ControlIsActuated())
+                    if (!latestContext.ControlIsActuated())
                     {
-                        
-                        context.Canceled();
+                        Debug.Log("STARTED : STOP USING");
+                        latestContext.Canceled();
+                        m_hasStarted = false;
+                        m_ListPositionsOverTime = null;
                     }
                     break;
 
                 case InputActionPhase.Performed:
-                    if (!context.ControlIsActuated(pressPointOrDefault))
-                        context.Canceled();
+                    if (!latestContext.ControlIsActuated(pressPointOrDefault))
+                    {
+                        Debug.Log("PERFORMED : STOP USING");
+                        latestContext.Canceled();
+                        m_hasStarted = false;
+                        m_ListPositionsOverTime = null;
+                    }   
                     break;
             }
+        }
+
+        private bool IsACircle(List<Vector2> points)
+        {
+            //TODO find center
+            //TODO check is all points are at the same distance from the center
+
+            //TEMPORARY : if the first and the last point are the same, then it is a circle
+            return (points.Count > 2 && points[0] == points[points.Count - 1] && points[0] != points[1]);
         }
 
         /// <inheritdoc />
