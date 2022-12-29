@@ -46,7 +46,7 @@ namespace UnityEngine.InputSystem.Interactions
         /// Duration is expressed in real time and measured against the timestamps of input events
         /// (<see cref="LowLevel.InputEvent.time"/>) not against game time (<see cref="Time.time"/>).
         /// </remarks>
-        public float duration;
+        //public float duration;
 
         /// <summary>
         /// Magnitude threshold that must be crossed by an actuated control for the control to
@@ -56,110 +56,115 @@ namespace UnityEngine.InputSystem.Interactions
         /// If this is less than or equal to 0 (the default), <see cref="InputSettings.defaultButtonPressPoint"/> is used instead.
         /// </remarks>
         /// <seealso cref="InputControl.EvaluateMagnitude()"/>
-        public float pressPoint;
+        //public float pressPoint;
 
-        private float durationOrDefault => duration > 0.0 ? duration : InputSystem.settings.defaultHoldTime;
-        private float pressPointOrDefault => pressPoint > 0.0 ? pressPoint : ButtonControl.s_GlobalDefaultButtonPressPoint;
+        /// <summary>
+        /// Maximum offset allowed between a point and its estimation to be consider correct.
+        /// </summary> 
+        public float accuracyOffset;
 
-        private double m_TimePressed;
+        //private float durationOrDefault => duration > 0.0 ? duration : InputSystem.settings.defaultHoldTime;
+        //private float pressPointOrDefault => pressPoint > 0.0 ? pressPoint : ButtonControl.s_GlobalDefaultButtonPressPoint;
+
+        private List<ButtonControl> m_buttonControls;
+        private int m_indexButtonActuated = -1;
 
         /// <summary>
         /// List build when the interaction is started and register all the position of the device (mouse). This position will then be analysed to check if it form a circle
         /// </summary>
         private List<Vector2> m_ListPositionsOverTime;
 
-        private bool m_hasStarted;
-
-        private InputInteractionContext latestContext;
-
-        private void OnUpdate()
-        {
-            var listControls = latestContext.control.device.allControls.ToList();
-            Vector2Control controlPosition = listControls.Find(ctr => ctr.valueType == typeof(Vector2)) as Vector2Control;
-
-            Debug.Log(controlPosition.x.ReadValue() + " , " + controlPosition.y.ReadValue());
-
-        }
-
        /// <inheritdoc />
        public void Process(ref InputInteractionContext context)
         {
-            Debug.Log("PROCESS");
-            m_hasStarted = false;
+            //Get all control button in m_ListButtonControl 
+            //Note that the list is build backward because the first button of the Mouse (Press) is true only when starting pressing a button
+            m_buttonControls = new List<ButtonControl>();
+            var listControls = context.control.device.allControls.ToList();
+            for(int i=0; i<listControls.Count; ++i)
+            {
+                var ctr = listControls[i];
+                ButtonControl ctrButton = ctr as ButtonControl;
+                if(ctrButton != null)
+                {
+                    m_buttonControls.Insert(0,ctrButton);
+                }
+            }
 
-            latestContext = context;
+            Vector2 value = (context.control as InputControl<Vector2>).ReadUnprocessedValue();
 
-            //Get control from context that store the mouse or stick position 
-            //TODO : find a safer version that find the right element event the device has multiple control returning Vector2 as value
-            //or use a Dictionnary of Control/List<Vector2> to trqck qll control using vector 2 and check if at least one is making a circle
-            var listControls = latestContext.control.device.allControls.ToList();
-            Vector2Control controlPosition = listControls.Find(ctr => ctr.valueType == typeof(Vector2)) as Vector2Control;
-
-            switch (latestContext.phase)
+            switch (context.phase)
             {
                 case InputActionPhase.Waiting:
-                    Debug.Log("WAITING");
-                    if (context.ControlIsActuated(pressPointOrDefault))
-                    {
-                        m_hasStarted = true;
+                    Debug.Log($"WAIT");
 
-                        if (m_ListPositionsOverTime == null)
+                    if (!context.ControlIsActuated())
+                    {
+                        break;
+                    }
+
+                    for(int i=0; i<m_buttonControls.Count; ++i)
+                    {
+                        //check if any buttonControl is actuated, if yes the index is kept in m_indexButtonActuated and the context is started
+                        if (m_buttonControls[i].IsActuated())
                         {
-                            m_ListPositionsOverTime = new List<Vector2>();
+                            m_indexButtonActuated = i;
+                            Debug.Log($"START index:{m_indexButtonActuated}");
+                            context.Started();
+                            if (m_ListPositionsOverTime == null)
+                            {
+                                m_ListPositionsOverTime = new List<Vector2>();
+                            }
+
+                            m_ListPositionsOverTime.Add(value);
+                            break;
                         }
                     }
 
-                    if (m_hasStarted)
-                    {
-                        if (!latestContext.ControlIsActuated())
-                        {
-                            Debug.Log("WAITING : STOP USING");
-                            latestContext.Canceled();
-                            m_ListPositionsOverTime = null;
-                        }
-
-
-                        m_ListPositionsOverTime.Add(new Vector2(controlPosition.x.ReadValue(), controlPosition.y.ReadValue()));
-                        if (latestContext.time - m_TimePressed >= durationOrDefault)
-                        {
-                            latestContext.Started();
-                        }
-                    }
                     break;
-
                 case InputActionPhase.Started:
-                    Debug.Log("START USING");
-                    //TODO : Get value from current controlPosition and add it to m_ListPositionsOverTime
-                   
-                    m_ListPositionsOverTime.Add(new Vector2(controlPosition.x.ReadValue(), controlPosition.y.ReadValue()));
-                    //Debug.Log(controlPosition.x.ReadValue() + " , " + controlPosition.y.ReadValue()+" size: "+ m_ListPositionsOverTime.Count);
-
-                    //TODO : Condition to check if all registered positions form a circle
-                    if(IsACircle(m_ListPositionsOverTime))
+                    Debug.Log("STARTED");
+                    if (context.ControlIsActuated())
                     {
-                        latestContext.PerformedAndStayPerformed();
+                        m_ListPositionsOverTime.Add(value);
+                        //Check if the list of point collected over time form a circle, if yes the action is performed
+                        if (IsACircle(m_ListPositionsOverTime))
+                        {
+                            Debug.Log("PERFORM");
+                            context.PerformedAndStayPerformed();
+                            break;
+                        }
+
+                        //TODO : Implement "CanBeCircle" to define if the points form an incomplete circle. if send false, call context.Canceled();
                     }
 
-                    // ControlIsActuted indicate is the control is currently used (ie. button pressed, stick not in its initial position,...)
-                    if (!latestContext.ControlIsActuated())
+                    //if the control binded or the button control used to start the action are no longer actuated, the action is canceled
+                    if (!context.ControlIsActuated() || m_indexButtonActuated < 0 || !m_buttonControls[m_indexButtonActuated].IsActuated())
                     {
-                        Debug.Log("STARTED : STOP USING");
-                        latestContext.Canceled();
-                        m_hasStarted = false;
-                        m_ListPositionsOverTime = null;
+                        Debug.Log($"CANCEL IN STARTED");
+                        context.Canceled();
+                        Reset();
                     }
                     break;
 
                 case InputActionPhase.Performed:
-                    if (!latestContext.ControlIsActuated(pressPointOrDefault))
+                    Debug.Log("PERFORMED");
+                    //The action stays performed as long as the control binded is actuated and the button control used is still held
+                    if (!context.ControlIsActuated() || m_indexButtonActuated < 0 || !m_buttonControls[m_indexButtonActuated].IsActuated())
                     {
-                        Debug.Log("PERFORMED : STOP USING");
-                        latestContext.Canceled();
-                        m_hasStarted = false;
-                        m_ListPositionsOverTime = null;
-                    }   
+                        Debug.Log("CANCEL IN PERFORMED");
+                        context.Canceled();
+                        Reset();
+                    }
                     break;
             }
+        }
+
+        /// <inheritdoc />
+        public void Reset()
+        {
+            m_indexButtonActuated = -1;
+            m_ListPositionsOverTime = new List<Vector2>();
         }
 
         private bool IsACircle(List<Vector2> points)
@@ -168,13 +173,13 @@ namespace UnityEngine.InputSystem.Interactions
             //TODO check is all points are at the same distance from the center
 
             //TEMPORARY : if the first and the last point are the same, then it is a circle
-            return (points.Count > 2 && points[0] == points[points.Count - 1] && points[0] != points[1]);
-        }
 
-        /// <inheritdoc />
-        public void Reset()
-        {
-            m_TimePressed = 0;
+            if(points.Count <= 2)
+            {
+                return false;
+            }
+
+            return (Math.Abs(points[0].x - points[points.Count - 1].x) <= accuracyOffset && Math.Abs(points[0].y - points[points.Count - 1].y) <= accuracyOffset);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]

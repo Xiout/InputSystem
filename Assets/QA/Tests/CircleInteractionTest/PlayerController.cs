@@ -6,25 +6,37 @@ using UnityEngine.InputSystem;
 public class PlayerController : MonoBehaviour
 {
     private bool _isTurn;
+    private CircleAction controls;
 
-    // Start is called before the first frame update
+    void Awake()
+    {
+        controls = new CircleAction();
+        controls.Enable();
+    }
+
     void Start()
     {
-        
+        //controls.Player.Turn.performed += Turn;
     }
 
-    // Update is called once per frame
+    private void OnEnable()
+    {
+        if (controls != null)
+            controls.Enable();
+    }
+
+    private void OnDisable()
+    {
+        if(controls!=null)
+            controls.Disable();
+    }
+
+
     void Update()
     {
-        if (_isTurn)
+        if (controls.Player.Turn.triggered)
         {
             gameObject.transform.RotateAround(gameObject.transform.position, Vector3.up, 30);
-            _isTurn = false;
         }
-    }
-
-    void OnTurn(InputValue value)
-    {
-        _isTurn = value.isPressed;
     }
 }

@@ -7,11 +7,11 @@
             "actions": [
                 {
                     "name": "Turn",
-                    "type": "Button",
+                    "type": "Value",
                     "id": "38b8f187-ed24-472e-bbd4-5733060330f2",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "Vector2",
                     "processors": "",
-                    "interactions": "Circle(duration=0.5,pressPoint=1)",
+                    "interactions": "Circle(accuracyOffset=5)",
                     "initialStateCheck": true
                 }
             ],
@@ -19,7 +19,7 @@
                 {
                     "name": "",
                     "id": "21c2b1d1-b4b8-4ae2-9661-0f90b0b19c36",
-                    "path": "<Mouse>/leftButton",
+                    "path": "<Mouse>/position",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
