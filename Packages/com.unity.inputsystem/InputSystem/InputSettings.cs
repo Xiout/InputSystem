@@ -411,6 +411,32 @@ namespace UnityEngine.InputSystem
             }
         }
 
+        public float defaultCircleTimeMax
+        {
+            get => m_DefaultCircleTimeMax;
+            set
+            {
+                // ReSharper disable once CompareOfFloatsByEqualityOperator
+                if (m_DefaultCircleTimeMax == value)
+                    return;
+                m_DefaultCircleTimeMax = value;
+                OnChange();
+            }
+        }
+
+        public float defaultAccuracyPercent
+        {
+            get => m_DefaultAccuracyPercent;
+            set
+            {
+                // ReSharper disable once CompareOfFloatsByEqualityOperator
+                if (m_DefaultAccuracyPercent == value)
+                    return;
+                m_DefaultAccuracyPercent = value;
+                OnChange();
+            }
+        }
+
         /// <summary>
         /// Allows you to specify the default maximum radius that a touch contact may be moved from its origin to evaluate to a tap-interaction.
         /// </summary>
@@ -742,6 +768,8 @@ namespace UnityEngine.InputSystem
         [SerializeField] private float m_DefaultTapTime = 0.2f;
         [SerializeField] private float m_DefaultSlowTapTime = 0.5f;
         [SerializeField] private float m_DefaultHoldTime = 0.4f;
+        [SerializeField] private float m_DefaultCircleTimeMax = 5f;
+        [SerializeField] private float m_DefaultAccuracyPercent = 70.0f;
         [SerializeField] private float m_TapRadius = 5;
         [SerializeField] private float m_MultiTapDelayTime = 0.75f;
         [SerializeField] private bool m_DisableRedundantEventsMerging = false;

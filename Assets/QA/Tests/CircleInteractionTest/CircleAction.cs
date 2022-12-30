@@ -33,7 +33,7 @@ public partial class @CircleAction: IInputActionCollection2, IDisposable
                     ""id"": ""38b8f187-ed24-472e-bbd4-5733060330f2"",
                     ""expectedControlType"": ""Vector2"",
                     ""processors"": """",
-                    ""interactions"": ""Circle(accuracyOffset=5)"",
+                    ""interactions"": ""Circle(durationMin=0.4,durationMax=4,accuracyPercent=60)"",
                     ""initialStateCheck"": true
                 }
             ],

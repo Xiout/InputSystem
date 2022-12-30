@@ -4,6 +4,7 @@ using UnityEngine.Scripting;
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using UnityEngine.InputSystem.Utilities;
 #if UNITY_EDITOR
 using UnityEngine.InputSystem.Editor;
 using UnityEditor;
@@ -38,7 +39,7 @@ namespace UnityEngine.InputSystem.Interactions
     public class CircleInteraction : IInputInteraction//<Vector2>
     {
         /// <summary>
-        /// Duration in seconds that the control must be pressed for the hold to register.
+        /// Duration in seconds that the control must be pressed at least to register.
         /// </summary>
         /// <remarks>
         /// If this is less than or equal to 0 (the default), <see cref="InputSettings.defaultHoldTime"/> is used.
@@ -46,7 +47,18 @@ namespace UnityEngine.InputSystem.Interactions
         /// Duration is expressed in real time and measured against the timestamps of input events
         /// (<see cref="LowLevel.InputEvent.time"/>) not against game time (<see cref="Time.time"/>).
         /// </remarks>
-        //public float duration;
+        public float durationMin;
+
+        /// <summary>
+        /// Duration in seconds under which the circle must be performed to be register. 
+        /// </summary>
+        /// /// <remarks>
+        /// If this is less than or equal to 0 (the default), <see cref="InputSettings.defaultCircleTimeMax"/> is used.
+        ///
+        /// Duration is expressed in real time and measured against the timestamps of input events
+        /// (<see cref="LowLevel.InputEvent.time"/>) not against game time (<see cref="Time.time"/>).
+        /// </remarks>
+        public float durationMax;
 
         /// <summary>
         /// Magnitude threshold that must be crossed by an actuated control for the control to
@@ -61,13 +73,28 @@ namespace UnityEngine.InputSystem.Interactions
         /// <summary>
         /// Maximum offset allowed between a point and its estimation to be consider correct.
         /// </summary> 
-        public float accuracyOffset;
+        //public float accuracyOffset;
 
-        //private float durationOrDefault => duration > 0.0 ? duration : InputSystem.settings.defaultHoldTime;
+        /// <summary>
+        /// Exactness requiered for the circle to be register (0-100) 
+        /// </summary> 
+        /// <remarks>
+        /// The maximal offset allowed between a point and its estimation to be considered correct will be calculated using this parameter and the distance between the furthest points.
+        /// To have optimal result, the value should be greater than 60
+        /// </remarks>
+        public float accuracyPercent;
+
+        private float durationMinOrDefault => durationMin > 0.0 ? durationMin : InputSystem.settings.defaultHoldTime;
+        private float durationMaxOrDefault => durationMax > 0.0 ? durationMax : InputSystem.settings.defaultCircleTimeMax;
+
+        private float accuracyPercentOrDefault => (accuracyPercent > 0.0 && accuracyPercent <= 100.0) ? accuracyPercent : InputSystem.settings.defaultAccuracyPercent;
+
         //private float pressPointOrDefault => pressPoint > 0.0 ? pressPoint : ButtonControl.s_GlobalDefaultButtonPressPoint;
 
         private List<ButtonControl> m_buttonControls;
         private int m_indexButtonActuated = -1;
+
+        private double m_TimePressed;
 
         /// <summary>
         /// List build when the interaction is started and register all the position of the device (mouse). This position will then be analysed to check if it form a circle
@@ -110,6 +137,8 @@ namespace UnityEngine.InputSystem.Interactions
                         {
                             m_indexButtonActuated = i;
                             Debug.Log($"START index:{m_indexButtonActuated}");
+
+                            m_TimePressed = context.time;
                             context.Started();
                             if (m_ListPositionsOverTime == null)
                             {
@@ -126,22 +155,38 @@ namespace UnityEngine.InputSystem.Interactions
                     Debug.Log("STARTED");
                     if (context.ControlIsActuated())
                     {
-                        m_ListPositionsOverTime.Add(value);
-                        //Check if the list of point collected over time form a circle, if yes the action is performed
-                        if (IsACircle(m_ListPositionsOverTime))
+                        if (context.time - m_TimePressed > durationMaxOrDefault)
                         {
-                            Debug.Log("PERFORM");
-                            context.PerformedAndStayPerformed();
+                            //Time expired, the action is canceled
+                            Debug.Log($"CANCEL IN STARTED : time expired");
+                            context.Canceled();
+                            Reset();
                             break;
                         }
 
-                        //TODO : Implement "CanBeCircle" to define if the points form an incomplete circle. if send false, call context.Canceled();
+                        m_ListPositionsOverTime.Add(value);
+
+                        if (context.time - m_TimePressed >= durationMinOrDefault)
+                        {
+                            //Check if the list of point collected over time form a circle, if yes the action is performed
+                            if (IsFirstPointLastPoint(m_ListPositionsOverTime))
+                            {
+                                if(GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault))
+                                {
+                                    Debug.Log("PERFORM");
+                                    context.PerformedAndStayPerformed();
+                                    break;
+                                }
+                            }
+
+                            //TODO : Implement "CanBeCircle" to define if the points form an incomplete circle. if send false, call context.Canceled();
+                        }
                     }
 
                     //if the control binded or the button control used to start the action are no longer actuated, the action is canceled
                     if (!context.ControlIsActuated() || m_indexButtonActuated < 0 || !m_buttonControls[m_indexButtonActuated].IsActuated())
                     {
-                        Debug.Log($"CANCEL IN STARTED");
+                        Debug.Log($"CANCEL IN STARTED : release control");
                         context.Canceled();
                         Reset();
                     }
@@ -167,17 +212,20 @@ namespace UnityEngine.InputSystem.Interactions
             m_ListPositionsOverTime = new List<Vector2>();
         }
 
-        private bool IsACircle(List<Vector2> points)
+        /// <summary>
+        /// Check if the first and last point of the list are close enough using <see cref="accuracyOffset"/>
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns></returns>
+        private bool IsFirstPointLastPoint(List<Vector2> points)
         {
-            //TODO find center
-            //TODO check is all points are at the same distance from the center
-
-            //TEMPORARY : if the first and the last point are the same, then it is a circle
-
             if(points.Count <= 2)
             {
                 return false;
             }
+
+            var furthest = GeometryHelp.FindFurthestPoints(points);
+            float accuracyOffset = Vector2.Distance(furthest[0], furthest[1])/2 * (100-accuracyPercent) / 100;
 
             return (Math.Abs(points[0].x - points[points.Count - 1].x) <= accuracyOffset && Math.Abs(points[0].y - points[points.Count - 1].y) <= accuracyOffset);
         }

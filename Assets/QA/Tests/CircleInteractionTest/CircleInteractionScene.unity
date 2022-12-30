@@ -352,6 +352,8 @@ MonoBehaviour:
     type: 3}
   Prefab_PointGrey: {fileID: 2974761020728655608, guid: 59ebaa9264ae4994ca6d27ebc88137da,
     type: 3}
+  Prefab_PointRed: {fileID: 9027211491100248096, guid: 9b2252d1c9b04154f8b088047b51711c,
+    type: 3}
 --- !u!1 &1352185235
 GameObject:
   m_ObjectHideFlags: 0
