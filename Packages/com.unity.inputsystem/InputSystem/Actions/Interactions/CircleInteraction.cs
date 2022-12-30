@@ -171,7 +171,7 @@ namespace UnityEngine.InputSystem.Interactions
                             //Check if the list of point collected over time form a circle, if yes the action is performed
                             if (IsFirstPointLastPoint(m_ListPositionsOverTime))
                             {
-                                if(GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault))
+                                if (GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault, GeometryHelp.CircleMethod.ThreePoints))
                                 {
                                     Debug.Log("PERFORM");
                                     context.PerformedAndStayPerformed();

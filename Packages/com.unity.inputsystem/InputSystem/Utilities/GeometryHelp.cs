@@ -18,6 +18,62 @@ namespace UnityEngine.InputSystem.Utilities
             }
         }
 
+        /// <summary>
+        /// Take 3 points among the list and get the circle that is passing by all 3 points
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns></returns>
+        public static Circle Get3PointsCircle(List<Vector2> points)
+        {
+            if(points==null || points.Count < 3)
+            {
+                //not enough points !
+                return null;
+            }
+
+            int indexA, indexB, indexC;
+            indexA = 0;
+            indexB = (int)(points.Count / 3);
+            indexC = indexB + (int)(points.Count / 3);
+
+            return Get3PointsCircle(points[indexA], points[indexB], points[indexC]);
+        }
+
+        /// <summary>
+        /// Get the circle that is passing by all 3 points given in parameter
+        /// </summary>
+        /// <param name="A"></param>
+        /// <param name="B"></param>
+        /// <param name="C"></param>
+        /// <returns></returns>
+        public static Circle Get3PointsCircle(Vector2 A, Vector2 B, Vector2 C)
+        {
+            float c, f, g;
+
+            f = (-(2 * B.x - 2 * A.x) * Mathf.Pow(C.x, 2)
+                - (2 * B.x - 2 * A.x) * Mathf.Pow(C.y, 2)
+                + 2 * C.x * (Mathf.Pow(B.x, 2) + Mathf.Pow(B.y, 2) - Mathf.Pow(A.x, 2) - Mathf.Pow(A.y, 2))
+                + (2 * B.x - 2 * A.x) * Mathf.Pow(A.x, 2)
+                + (2 * B.x - 2 * A.x) * Mathf.Pow(A.y, 2)
+                + 2 * A.x * (-Mathf.Pow(B.x, 2) - Mathf.Pow(B.y, 2) + Mathf.Pow(A.x, 2) + Mathf.Pow(A.y, 2)))
+                / ((2 * B.x - 2 * A.x) * 2 * C.y - 4 * C.x * B.y + 4 * C.x*A.y - (2 * B.x - 2 * A.x)*A.y+4*A.x*B.y-4*A.x*A.y);
+
+            g = (-Mathf.Pow(B.x, 2) - Mathf.Pow(B.y, 2)  - 2 * f * B.y + Mathf.Pow(A.x, 2) + Mathf.Pow(A.y, 2) + 2 * f * A.y) / (2 * B.x - 2 * A.x);
+
+            c = -Mathf.Pow(A.x, 2) - Mathf.Pow(A.y, 2) - 2 * g * A.x - 2 * f * A.y;
+
+            Vector2 center = new Vector2(-g, -f);
+            float radius = Mathf.Sqrt(Mathf.Pow(g, 2) + Mathf.Pow(f, 2) - c);
+
+            return new Circle(center, radius);
+
+        }
+
+        /// <summary>
+        /// Get the circle define by the distance of the 2 furthest point as diameter and the middle of these 2 points as center
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns></returns>
         public static Circle GetCircleFurthestPoints(List<Vector2> points)
         {
             Vector2[] furthestPoints = FindFurthestPoints(points);
@@ -27,6 +83,11 @@ namespace UnityEngine.InputSystem.Utilities
             return new Circle(center, radius);
         }
 
+        /// <summary>
+        /// For a given list of points, find the 2 points with the longest distance between
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns></returns>
         public static Vector2[] FindFurthestPoints(List<Vector2> points)
         {
             Vector2[] furthestPoints = new Vector2[2];
@@ -49,9 +110,33 @@ namespace UnityEngine.InputSystem.Utilities
             return furthestPoints;
         }
 
-        public static bool IsCircle(List<Vector2> points, float accuracyPercent)
+        public enum CircleMethod { FurthestPoints, ThreePoints }
+
+        /// <summary>
+        /// Check if all the points are in between 2 limit circles. 
+        /// A first circle is calculated depending on the chosen method then the 2 limit circles are define from this first circle and the accuracyPercent.
+        /// </summary>
+        /// <param name="points"></param>
+        /// <param name="accuracyPercent"></param>
+        /// <param name="method"></param>
+        /// <returns></returns>
+        public static bool IsCircle(List<Vector2> points, float accuracyPercent, CircleMethod method)
         {
-            Circle originalCircle = GetCircleFurthestPoints(points);
+            Circle originalCircle = null;
+            switch (method)
+            {
+                case CircleMethod.FurthestPoints:
+                    originalCircle = GetCircleFurthestPoints(points);
+                    break;
+                case CircleMethod.ThreePoints:
+                    originalCircle = Get3PointsCircle(points);
+                    break;
+            }
+
+            if (originalCircle == null)
+            {
+                return false;
+            }
 
             float accuracyOffset = originalCircle.Radius * 2 * (100 - accuracyPercent) / 100;
             Circle smallCircle = new Circle(originalCircle.Center, originalCircle.Radius - (accuracyOffset / 2));
@@ -74,10 +159,32 @@ namespace UnityEngine.InputSystem.Utilities
             return true;
         }
 
-        public static List<Vector2> GetIncorrectPointsCircle(List<Vector2> points, float accuracyPercent)
+        /// <summary>
+        /// Return the list of all points that does not stand out between the 2 limit circles
+        /// </summary>
+        /// <param name="points"></param>
+        /// <param name="accuracyPercent"></param>
+        /// <param name="method"></param>
+        /// <returns></returns>
+        public static List<Vector2> GetIncorrectPointsCircle(List<Vector2> points, float accuracyPercent, CircleMethod method)
         {
             List<Vector2> incorrectPoints = new List<Vector2>();
-            Circle originalCircle = GetCircleFurthestPoints(points);
+
+            Circle originalCircle = null;
+            switch (method)
+            {
+                case CircleMethod.FurthestPoints:
+                    originalCircle = GetCircleFurthestPoints(points);
+                    break;
+                case CircleMethod.ThreePoints:
+                    originalCircle = Get3PointsCircle(points);
+                    break;
+            }
+
+            if (originalCircle == null)
+            {
+                return incorrectPoints;
+            }
 
             float accuracyOffset = originalCircle.Radius * 2 * (100 - accuracyPercent) / 100;
             Circle smallCircle = new Circle(originalCircle.Center, originalCircle.Radius - (accuracyOffset/2));
@@ -105,8 +212,11 @@ namespace UnityEngine.InputSystem.Utilities
             return incorrectPoints;
         }
 
-
-        public static void FindFurthestGameObject(List<GameObject> GOs)
+        /// <summary>
+        /// Find the 2 object that have the longest distance between and change their scale. 
+        /// </summary>
+        /// <param name="GOs"></param>
+        public static void FindFurthestGameObject_DEBUG(List<GameObject> GOs)
         {
             GameObject go1 = null;
             GameObject go2 = null;

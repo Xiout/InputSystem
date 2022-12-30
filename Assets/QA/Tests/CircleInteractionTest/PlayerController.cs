@@ -45,11 +45,9 @@ public class PlayerController : MonoBehaviour
         if (index != -1)
         {
             interactionsStr = interactionsStr.Substring(index + cut.Length);
-            Debug.Log("Step1 : "+interactionsStr);
 
             index = interactionsStr.IndexOf(")");
             interactionsStr = interactionsStr.Substring(0, interactionsStr.Length-(interactionsStr.Length - index));
-            Debug.Log("Step2 : "+interactionsStr);
 
             cut = "accuracyPercent=";
             index = interactionsStr.IndexOf(cut);
@@ -58,7 +56,6 @@ public class PlayerController : MonoBehaviour
                 interactionsStr = interactionsStr.Substring(index + cut.Length);
                 float result = -1;
 
-                Debug.Log("Step3 : "+interactionsStr);
                 if(float.TryParse(interactionsStr, out result))
                 {
                     accuracyPercent = result;
@@ -85,6 +82,7 @@ public class PlayerController : MonoBehaviour
     {
         isStarted = true;
         GesturePoints = new List<Vector2>();
+        //wipe out previously drawn debug points so only one action is displayed t the time
         GameObject.Destroy(DebugGO);
         DebugGO = new GameObject();
         DebugGO.name = "DEBUG";
@@ -102,16 +100,16 @@ public class PlayerController : MonoBehaviour
 
         if (!hadBeenPerformed)
         {
-            DrawHelpCircle();
-            var incorrectPoints = GeometryHelp.GetIncorrectPointsCircle(GesturePoints, accuracyPercent);
+            //The action is canceled, draw the circles to visually compare the acquired points with the circles estimation
+            DrawHelpCircles();
+
+            //Get and draw all the incorrect points to ease the see which points wa considered as false;
+            var incorrectPoints = GeometryHelp.GetIncorrectPointsCircle(GesturePoints, accuracyPercent, GeometryHelp.CircleMethod.ThreePoints);
             for(int i=0; i< incorrectPoints.Count; ++i)
             {
-                Vector3 incorrectPointMouse3D = new Vector3(incorrectPoints[i].x, incorrectPoints[i].y, defaultZCoord2D);
-                Vector3 incorrectPointWorld3D = Camera.main.ScreenToWorldPoint(incorrectPointMouse3D);
-                GameObject incorrectPoint = GameObject.Instantiate(Prefab_PointRed);
-                incorrectPoint.transform.position = incorrectPointWorld3D;
-                incorrectPoint.transform.Translate(0, 0, -0.01f);
-                incorrectPoint.transform.SetParent(DebugGO.transform);
+                Vector3 incorrectPoint = new Vector3(incorrectPoints[i].x, incorrectPoints[i].y, defaultZCoord2D);
+                var incorrectPointGO = DrawDebugPoint(incorrectPoint, Prefab_PointRed);
+                incorrectPointGO.transform.Translate(0, 0, -0.01f);
             }
         }
         
@@ -120,49 +118,53 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
-        defaultZCoord2D = Camera.main.nearClipPlane + 1;
-
+        //Use of the action to rotate the player GameObject 
         if (controls.Player.Turn.triggered)
         {
             gameObject.transform.RotateAround(gameObject.transform.position, Vector3.up, 30);
         }
-        
+
+        //DEBUG : display of sprite as visual aid
+        //Orange points : points acquired when the action is started but not performed yet
+        //Green  points : points acquired after the action is performed but when is not had been canceled yet (ie. still holding the control)
+        //Grey   points : points of the circles (an their center) in between which all the points should lay so the acquired points are considered to form a circle
+        //Red    points : points that stands outside of the 2 circles
+
+        //Update defaultZCoord2D in case the camera had changed of position
+        defaultZCoord2D = Camera.main.nearClipPlane + 1;
+
         Vector2 mousePos2D = controls.Player.Turn.ReadValue<Vector2>();
         if(mousePos2D != null && isStarted)
         {
+            //As we cannot have access to the list of acquired points during the action, rebuild this list using ReadValue on the Turn action
+            //To ease calculation, doublon of points are ignored
             if (!GesturePoints.Contains(mousePos2D))
             {
                 GesturePoints.Add(mousePos2D);
             }
 
+            //Draw acquired points in green if performed or orange if not
             Vector3 mousePos3D = new Vector3(mousePos2D.x, mousePos2D.y, defaultZCoord2D);
-            Vector3 worldPos3D = Camera.main.ScreenToWorldPoint(mousePos3D);
-
-            GameObject newPoint;
+            GameObject prefab = Prefab_PointOrange;
             if (isPerformed)
             {
-                newPoint = GameObject.Instantiate(Prefab_PointGreen);
-                newPoint.transform.position = worldPos3D;
-                newPoint.transform.Translate(0, 0, -0.01f);
+                prefab = Prefab_PointGreen;
             }
-            else
-            {
-                newPoint = GameObject.Instantiate(Prefab_PointOrange);
-                newPoint.transform.position = worldPos3D;
-            }
+            DrawDebugPoint(mousePos3D, prefab);
 
-            newPoint.transform.SetParent(DebugGO.transform);
-
+            //If the action just had been performed, draw the circles to visually compare the acquired points with the circles estimation
             if (controls.Player.Turn.WasPerformedThisFrame())
             {
-                DrawHelpCircle();
+                DrawHelpCircles();
                 hadBeenPerformed = true;
             }
         }
-       
     }
 
-    private void DrawHelpCircle()
+    /// <summary>
+    /// Draw limite circles in between which all the points of GesturePoints should lay to be considered as a circle
+    /// </summary>
+    private void DrawHelpCircles()
     {
         List<GameObject> GOs = new List<GameObject>();
         for (int i = 0; i < DebugGO.transform.childCount; ++i)
@@ -170,30 +172,46 @@ public class PlayerController : MonoBehaviour
             Transform child = DebugGO.transform.GetChild(i);
             GOs.Add(child.gameObject);
         }
-        GeometryHelp.FindFurthestGameObject(GOs);
+        //GeometryHelp.FindFurthestGameObject(GOs);
 
-        var circle = GeometryHelp.GetCircleFurthestPoints(GesturePoints);
+        var circle = GeometryHelp.Get3PointsCircle(GesturePoints);
 
-        Vector3 centerMouse3D = new Vector3(circle.Center.x, circle.Center.y, defaultZCoord2D);
-        Vector3 centerWorldPos3D = Camera.main.ScreenToWorldPoint(centerMouse3D);
-        GameObject circleCenterPoint = GameObject.Instantiate(Prefab_PointGrey);
-        circleCenterPoint.transform.position = centerWorldPos3D;
-        circleCenterPoint.transform.SetParent(DebugGO.transform);
+        Vector3 center = new Vector3(circle.Center.x, circle.Center.y, defaultZCoord2D);
+        DrawDebugPoint(center, Prefab_PointGrey);
 
         for (float theta = -Mathf.PI; theta < Mathf.PI; theta += 0.1f)
         {
             float accuracyOffset = circle.Radius * 2 * (100 - accuracyPercent) / 100;
-            Vector3 circlePointMouse3D = new Vector3((circle.Radius + accuracyOffset / 2) * Mathf.Sin(theta) + circle.Center.x, (circle.Radius + accuracyOffset / 2) * Mathf.Cos(theta) + circle.Center.y, defaultZCoord2D);
-            Vector3 circlePointWorldPos3D = Camera.main.ScreenToWorldPoint(circlePointMouse3D);
-            GameObject circlePoint = GameObject.Instantiate(Prefab_PointGrey);
-            circlePoint.transform.position = circlePointWorldPos3D;
-            circlePoint.transform.SetParent(DebugGO.transform);
 
-            circlePointMouse3D = new Vector3((circle.Radius - accuracyOffset/2 )* Mathf.Sin(theta) + circle.Center.x, (circle.Radius - accuracyOffset/2) * Mathf.Cos(theta) + circle.Center.y, defaultZCoord2D);
-            circlePointWorldPos3D = Camera.main.ScreenToWorldPoint(circlePointMouse3D);
-            circlePoint = GameObject.Instantiate(Prefab_PointGrey);
-            circlePoint.transform.position = circlePointWorldPos3D;
-            circlePoint.transform.SetParent(DebugGO.transform);
+            Vector3 bigCirclePoint = new Vector3(
+                (circle.Radius + accuracyOffset / 2) * Mathf.Sin(theta) + circle.Center.x, 
+                (circle.Radius + accuracyOffset / 2) * Mathf.Cos(theta) + circle.Center.y, 
+                defaultZCoord2D
+            );
+            DrawDebugPoint(bigCirclePoint, Prefab_PointGrey);
+
+            Vector3 smallCirclePoint = new Vector3(
+                (circle.Radius - accuracyOffset / 2) * Mathf.Sin(theta) + circle.Center.x,
+                (circle.Radius - accuracyOffset / 2) * Mathf.Cos(theta) + circle.Center.y,
+                defaultZCoord2D
+            );
+            DrawDebugPoint(smallCirclePoint, Prefab_PointGrey);
         }
+    }
+
+    /// <summary>
+    /// Instanciate an instance of the given prefab at the given position converted from mouse coordinate to world coordinate and set the Debug GameObject as parent
+    /// </summary>
+    /// <param name="coordinateMouse3D"></param>
+    /// <param name="prefab"></param>
+    /// <returns></returns>
+    private GameObject DrawDebugPoint(Vector3 coordinateMouse3D, GameObject prefab)
+    {
+        Vector3 coordinateWorld3D = Camera.main.ScreenToWorldPoint(coordinateMouse3D);
+        GameObject drawnPoint = GameObject.Instantiate(prefab);
+        drawnPoint.transform.position = coordinateWorld3D;
+        drawnPoint.transform.SetParent(DebugGO.transform);
+
+        return drawnPoint;
     }
 }
