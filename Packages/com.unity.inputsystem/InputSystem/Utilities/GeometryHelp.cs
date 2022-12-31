@@ -7,6 +7,8 @@ namespace UnityEngine.InputSystem.Utilities
 {
     public class GeometryHelp
     {
+        public enum CircleMethod { MouseFurthestPoints, MouseThreePoints, Gamepad }
+
         public class Circle{
             public Vector2 Center;
             public float Radius;
@@ -19,11 +21,12 @@ namespace UnityEngine.InputSystem.Utilities
         }
 
         /// <summary>
-        /// Take 3 points among the list and get the circle that is passing by all 3 points
+        /// Take 3 points among the list and get the circle that is passing by these 3 points.
         /// </summary>
+        /// <remarks>Will work only with the mouse. For better result, considere ussing <see cref="GetCircleFurthestPoints(List{Vector2})"/> instead</remarks>
         /// <param name="points"></param>
         /// <returns></returns>
-        public static Circle Get3PointsCircle(List<Vector2> points)
+        private static Circle GetCircle3Points(List<Vector2> points)
         {
             if(points==null || points.Count < 3)
             {
@@ -36,7 +39,7 @@ namespace UnityEngine.InputSystem.Utilities
             indexB = (int)(points.Count / 3);
             indexC = indexB + (int)(points.Count / 3);
 
-            return Get3PointsCircle(points[indexA], points[indexB], points[indexC]);
+            return GetCircle3Points(points[indexA], points[indexB], points[indexC]);
         }
 
         /// <summary>
@@ -46,7 +49,7 @@ namespace UnityEngine.InputSystem.Utilities
         /// <param name="point2"></param>
         /// <param name="point3"></param>
         /// <returns></returns>
-        public static Circle Get3PointsCircle(Vector2 point1, Vector2 point2, Vector2 point3)
+        private static Circle GetCircle3Points(Vector2 point1, Vector2 point2, Vector2 point3)
         {
             var a = point1.x * (point2.y - point3.y) - point1.y * (point2.x - point3.x) + point2.x * point3.y - point3.x * point2.y;
 
@@ -67,9 +70,10 @@ namespace UnityEngine.InputSystem.Utilities
         /// <summary>
         /// Get the circle define by the distance of the 2 furthest point as diameter and the middle of these 2 points as center
         /// </summary>
+        /// <remarks>Will work only for the mouse</remarks>
         /// <param name="points"></param>
         /// <returns></returns>
-        public static Circle GetCircleFurthestPoints(List<Vector2> points)
+        private static Circle GetCircleFurthestPoints(List<Vector2> points)
         {
             Vector2[] furthestPoints = FindFurthestPoints(points);
 
@@ -83,14 +87,14 @@ namespace UnityEngine.InputSystem.Utilities
         /// </summary>
         /// <param name="points"></param>
         /// <returns></returns>
-        public static Vector2[] FindFurthestPoints(List<Vector2> points)
+        private static Vector2[] FindFurthestPoints(List<Vector2> points)
         {
             Vector2[] furthestPoints = new Vector2[2];
             float longestDistance = 0;
             float currentDistance = 0;
-            for(int i=0; i<points.Count; ++i)
+            for (int i = 0; i < points.Count; ++i)
             {
-                for (int j = i+1; j < points.Count; ++j)
+                for (int j = i + 1; j < points.Count; ++j)
                 {
                     currentDistance = Vector2.Distance(points[i], points[j]);
                     if (currentDistance > longestDistance)
@@ -105,11 +109,35 @@ namespace UnityEngine.InputSystem.Utilities
             return furthestPoints;
         }
 
-        public enum CircleMethod { FurthestPoints, ThreePoints }
+        /// <summary>
+        /// Get the circle that contains all the possible values returned by the gamepad stick
+        /// </summary>
+        /// <remarks>Will wok only for the gamepad stick</remarks>
+        /// <returns></returns>
+        private static Circle GetCircleGamepadValue()
+        {
+            return new Circle(new Vector2(0, 0), 1);
+        }
+
+        public static Circle GetCircle(List<Vector2> points, CircleMethod method)
+        {
+            switch (method)
+            {
+                case CircleMethod.MouseFurthestPoints:
+                    return GetCircleFurthestPoints(points);
+                case CircleMethod.MouseThreePoints:
+                    return GetCircle3Points(points);
+                case CircleMethod.Gamepad:
+                    return GetCircleGamepadValue();
+            }
+
+            return null;
+        }
 
         /// <summary>
-        /// Check if all the points are in between 2 limit circles. 
-        /// A first circle is calculated depending on the chosen method then the 2 limit circles are define from this first circle and the accuracyPercent.
+        /// For <see cref="CircleMethod.MouseFurthestPoints"/> and <see cref="CircleMethod.MouseThreePoints"/>, Check if all the points are in between 2 limit circles. 
+        /// A first circle is calculated depending on the chosen method then the 2 limit circles are define from this first circle and the accuracyPercent. 
+        /// For <see cref="CircleMethod.Gamepad"/>, check if most of the points are on the Gamepad value circle and are evenly spread.
         /// </summary>
         /// <param name="points"></param>
         /// <param name="accuracyPercent"></param>
@@ -117,64 +145,97 @@ namespace UnityEngine.InputSystem.Utilities
         /// <returns></returns>
         public static bool IsCircle(List<Vector2> points, float accuracyPercent, CircleMethod method)
         {
-            Circle originalCircle = null;
-            switch (method)
+            if (points.Count <= 2)
             {
-                case CircleMethod.FurthestPoints:
-                    originalCircle = GetCircleFurthestPoints(points);
-                    break;
-                case CircleMethod.ThreePoints:
-                    originalCircle = Get3PointsCircle(points);
-                    break;
+                //Not enough points to calculate a circle
+                return false;
             }
 
+            //Modelize a base circle that will enclosed most of the points using the chosen method
+            Circle originalCircle = GetCircle(points,method);
             if (originalCircle == null)
             {
                 return false;
             }
 
-            float accuracyOffset = originalCircle.Radius * 2 * (100 - accuracyPercent) / 100;
-            Circle smallCircle = new Circle(originalCircle.Center, originalCircle.Radius - (accuracyOffset / 2));
-            Circle bigCircle = new Circle(originalCircle.Center, originalCircle.Radius + (accuracyOffset / 2));
+            //Calculate accuracy offset based on the radius of the circle
+            float accuracyOffset = originalCircle.Radius * (100 - accuracyPercent) / 100;
 
-            bool isInsideBigCircle = false;
-            bool isOutsideSmallCircle = false;
-
-            for(int i=0; i<points.Count; ++i)
+            if (method == CircleMethod.Gamepad)
             {
-                isInsideBigCircle = Mathf.Pow((points[i].x - bigCircle.Center.x), 2) + Mathf.Pow((points[i].y - bigCircle.Center.y), 2) - Mathf.Pow(bigCircle.Radius, 2) <= 0;
-                if (!isInsideBigCircle)
-                    return false;
+                int countPointsOnCircle = 0;
+                Vector2 AveragePoint = new Vector2(0, 0);
+                for(int i = 0; i < points.Count; ++i)
+                {
+                    //check if the point is on the circle
+                    float circleEquation = Mathf.Pow((points[i].x - originalCircle.Center.x), 2) + Mathf.Pow((points[i].y - originalCircle.Center.y), 2) - Mathf.Pow(originalCircle.Radius, 2);
+                    //Handling float results in some inacuracies, therefore the check cannot be with ==0.
+                    bool isOnCircle = (Mathf.Abs(circleEquation) < 0.0001);
+                    
+                    if (isOnCircle)
+                    {
+                        ++countPointsOnCircle;
+                        AveragePoint.x += points[i].x;
+                        AveragePoint.y += points[i].y;
+                    }
+                }
 
-                isOutsideSmallCircle = Mathf.Pow((points[i].x - smallCircle.Center.x), 2) + Mathf.Pow((points[i].y - smallCircle.Center.y), 2) - Mathf.Pow(smallCircle.Radius, 2) >= 0;
-                if (!isOutsideSmallCircle)
+                //check if enough points acquired are on the circle
+                if ((countPointsOnCircle * 100 / points.Count) < accuracyPercent)
+                {
                     return false;
+                }
+
+                AveragePoint.x = AveragePoint.x / countPointsOnCircle;
+                AveragePoint.y = AveragePoint.y / countPointsOnCircle;
+
+                //Check how close the true middle of all the points that stands on the circle is in comparison to the center of the circle 
+                //The closer the true middle and the center are, the more evenly reparted the points are over the circle
+                return Vector2.Distance(AveragePoint, originalCircle.Center) <= accuracyOffset;
             }
+            else
+            {
+                //Check the distance between the first and last point
+                if (Vector2.Distance(points[0], points[points.Count - 1]) > accuracyOffset)
+                {
+                    //The first and last points are too far away to be form a complete circle
+                    return false;
+                }
 
-            return true;
+                Circle smallCircle = new Circle(originalCircle.Center, originalCircle.Radius - (accuracyOffset));
+                Circle bigCircle = new Circle(originalCircle.Center, originalCircle.Radius + (accuracyOffset));
+
+                bool isInsideBigCircle;
+                bool isOutsideSmallCircle;
+
+                for (int i = 0; i < points.Count; ++i)
+                {
+                    isInsideBigCircle = Mathf.Pow((points[i].x - bigCircle.Center.x), 2) + Mathf.Pow((points[i].y - bigCircle.Center.y), 2) - Mathf.Pow(bigCircle.Radius, 2) <= 0;
+                    if (!isInsideBigCircle)
+                        return false;
+
+                    isOutsideSmallCircle = Mathf.Pow((points[i].x - smallCircle.Center.x), 2) + Mathf.Pow((points[i].y - smallCircle.Center.y), 2) - Mathf.Pow(smallCircle.Radius, 2) >= 0;
+                    if (!isOutsideSmallCircle)
+                        return false;
+                }
+                return true;
+            }
         }
 
         /// <summary>
         /// Return the list of all points that does not stand out between the 2 limit circles
+        /// This method is used for debug purposes in order to visually represent which points caused the recognition algorithm to fail
         /// </summary>
         /// <param name="points"></param>
         /// <param name="accuracyPercent"></param>
         /// <param name="method"></param>
         /// <returns></returns>
-        public static List<Vector2> GetIncorrectPointsCircle(List<Vector2> points, float accuracyPercent, CircleMethod method)
+        [Obsolete]
+        public static List<Vector2> GetIncorrectPointsCircle_DEBUG(List<Vector2> points, float accuracyPercent, CircleMethod method)
         {
             List<Vector2> incorrectPoints = new List<Vector2>();
 
-            Circle originalCircle = null;
-            switch (method)
-            {
-                case CircleMethod.FurthestPoints:
-                    originalCircle = GetCircleFurthestPoints(points);
-                    break;
-                case CircleMethod.ThreePoints:
-                    originalCircle = Get3PointsCircle(points);
-                    break;
-            }
+            Circle originalCircle = GetCircle(points, method);
 
             if (originalCircle == null)
             {
@@ -205,35 +266,6 @@ namespace UnityEngine.InputSystem.Utilities
             }
 
             return incorrectPoints;
-        }
-
-        /// <summary>
-        /// Find the 2 object that have the longest distance between and change their scale. 
-        /// </summary>
-        /// <param name="GOs"></param>
-        public static void FindFurthestGameObject_DEBUG(List<GameObject> GOs)
-        {
-            GameObject go1 = null;
-            GameObject go2 = null;
-
-            float longestDistance = 0;
-            float currentDistance = 0;
-            for (int i = 0; i < GOs.Count; ++i)
-            {
-                for (int j = i + 1; j < GOs.Count; ++j)
-                {
-                    currentDistance = Vector2.Distance(GOs[i].transform.position, GOs[j].transform.position);
-                    if (currentDistance > longestDistance)
-                    {
-                        go1 = GOs[i];
-                        go2 = GOs[j];
-                        longestDistance = currentDistance;
-                    }
-                }
-            }
-
-            go1.transform.localScale = new Vector3(0.05f, 0.05f, 1);
-            go2.transform.localScale = new Vector3(0.05f, 0.05f, 1);
         }
     }
 }

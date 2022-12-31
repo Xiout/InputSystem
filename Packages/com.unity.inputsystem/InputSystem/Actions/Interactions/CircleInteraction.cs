@@ -65,11 +65,13 @@ namespace UnityEngine.InputSystem.Interactions
         /// </remarks>
         public float accuracyPercent;
 
+        private bool isMouse;
+
         /// <summary>
         /// Define which method is used to calculate if the list of points aquiered during the Interaction Process form a circle
         /// </summary>
         /// <remarks>
-        /// <see cref="GeometryHelp.CircleMethod.FurthestPoints"/> give the best results
+        /// <see cref="GeometryHelp.CircleMethod.MouseFurthestPoints"/> give the best results
         /// </remarks>
         public GeometryHelp.CircleMethod circleMethod;
 
@@ -77,8 +79,6 @@ namespace UnityEngine.InputSystem.Interactions
         private float durationMaxOrDefault => durationMax > 0.0 ? durationMax : InputSystem.settings.defaultCircleTimeMax;
 
         private float accuracyPercentOrDefault => (accuracyPercent > 0.0 && accuracyPercent <= 100.0) ? accuracyPercent : InputSystem.settings.defaultAccuracyPercent;
-
-        //private float pressPointOrDefault => pressPoint > 0.0 ? pressPoint : ButtonControl.s_GlobalDefaultButtonPressPoint;
 
         private List<ButtonControl> m_buttonControls;
         private int m_indexButtonActuated = -1;
@@ -93,61 +93,66 @@ namespace UnityEngine.InputSystem.Interactions
        /// <inheritdoc />
        public void Process(ref InputInteractionContext context)
         {
-            //Get all control button in m_ListButtonControl 
-            //Note that the list is build backward because the first button of the Mouse (Press) is true only when starting pressing a button
-            m_buttonControls = new List<ButtonControl>();
-            var listControls = context.control.device.allControls.ToList();
-            for(int i=0; i<listControls.Count; ++i)
+            isMouse = context.control.device.description.deviceClass == "Mouse";
+
+            if (isMouse)
             {
-                var ctr = listControls[i];
-                ButtonControl ctrButton = ctr as ButtonControl;
-                if(ctrButton != null)
+                //Get all control button in m_ListButtonControl 
+                //Note that the list is build backward because the first button of the Mouse (Press) is true only when starting pressing a button
+                m_buttonControls = new List<ButtonControl>();
+                var listControls = context.control.device.allControls.ToList();
+                for (int i = 0; i < listControls.Count; ++i)
                 {
-                    m_buttonControls.Insert(0,ctrButton);
+                    var ctr = listControls[i];
+                    ButtonControl ctrButton = ctr as ButtonControl;
+                    if (ctrButton != null)
+                    {
+                        m_buttonControls.Insert(0, ctrButton);
+                    }
                 }
             }
 
-            Vector2 value = (context.control as InputControl<Vector2>).ReadUnprocessedValue();
+            Vector2 value = (context.control as InputControl<Vector2>).ReadValue();
 
             switch (context.phase)
             {
                 case InputActionPhase.Waiting:
-                    Debug.Log($"WAIT");
-
                     if (!context.ControlIsActuated())
                     {
                         break;
                     }
 
-                    for(int i=0; i<m_buttonControls.Count; ++i)
+                    if (isMouse)
                     {
-                        //check if any buttonControl is actuated, if yes the index is kept in m_indexButtonActuated and the context is started
-                        if (m_buttonControls[i].IsActuated())
+                        for (int i = 0; i < m_buttonControls.Count; ++i)
                         {
-                            m_indexButtonActuated = i;
-                            Debug.Log($"START index:{m_indexButtonActuated}");
-
-                            m_TimePressed = context.time;
-                            context.Started();
-                            if (m_ListPositionsOverTime == null)
+                            //check if any buttonControl is actuated, if yes the index is kept in m_indexButtonActuated and the context is started
+                            if (m_buttonControls[i].IsActuated())
                             {
-                                m_ListPositionsOverTime = new List<Vector2>();
+                                m_indexButtonActuated = i;
+                                break;
                             }
-
-                            m_ListPositionsOverTime.Add(value);
-                            break;
                         }
                     }
+                    if (IsHold(context))
+                    {
+                        m_TimePressed = context.time;
+                        context.Started();
+                        if (m_ListPositionsOverTime == null)
+                        {
+                            m_ListPositionsOverTime = new List<Vector2>();
+                        }
 
+                        m_ListPositionsOverTime.Add(value);
+                    }
+                    
                     break;
                 case InputActionPhase.Started:
-                    Debug.Log("STARTED");
                     if (context.ControlIsActuated())
                     {
                         if (context.time - m_TimePressed > durationMaxOrDefault)
                         {
                             //Time expired, the action is canceled
-                            Debug.Log($"CANCEL IN STARTED : time expired");
                             context.Canceled();
                             Reset();
                             break;
@@ -158,33 +163,26 @@ namespace UnityEngine.InputSystem.Interactions
                         if (context.time - m_TimePressed >= durationMinOrDefault)
                         {
                             //Check if the list of point collected over time form a circle, if yes the action is performed
-                            if (IsFirstPointLastPoint(m_ListPositionsOverTime))
+                            if (GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault, circleMethod))
                             {
-                                if (GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault, GeometryHelp.CircleMethod.FurthestPoints))
-                                {
-                                    Debug.Log("PERFORM");
-                                    context.PerformedAndStayPerformed();
-                                    break;
-                                }
+                                context.PerformedAndStayPerformed();
+                                break;
                             }
                         }
                     }
 
                     //if the control binded or the button control used to start the action are no longer actuated, the action is canceled
-                    if (!context.ControlIsActuated() || m_indexButtonActuated < 0 || !m_buttonControls[m_indexButtonActuated].IsActuated())
+                    if (!IsHold(context))
                     {
-                        Debug.Log($"CANCEL IN STARTED : release control");
                         context.Canceled();
                         Reset();
                     }
                     break;
 
                 case InputActionPhase.Performed:
-                    Debug.Log("PERFORMED");
                     //The action stays performed as long as the control binded is actuated and the button control used is still held
-                    if (!context.ControlIsActuated() || m_indexButtonActuated < 0 || !m_buttonControls[m_indexButtonActuated].IsActuated())
+                    if (!IsHold(context))
                     {
-                        Debug.Log("CANCEL IN PERFORMED");
                         context.Canceled();
                         Reset();
                     }
@@ -200,21 +198,34 @@ namespace UnityEngine.InputSystem.Interactions
         }
 
         /// <summary>
-        /// Check if the first and last point of the list are close enough using <see cref="accuracyOffset"/>
+        /// Check is the control is actuated.
+        /// If using the mouse, check if a button of the mouse is also pressed at the same time.
         /// </summary>
-        /// <param name="points"></param>
+        /// <param name="context"></param>
         /// <returns></returns>
-        private bool IsFirstPointLastPoint(List<Vector2> points)
+        private bool IsHold(InputInteractionContext context)
         {
-            if(points.Count <= 2)
+            //If using the mouse, since mouse position is always sending actuated as long as the game is running,
+            //we need to use an extra control of the same device to define if the control is hold
+            if (isMouse)
             {
-                return false;
+                if(m_indexButtonActuated < 0)
+                {
+                    return false;
+                }
+
+                if(m_buttonControls == null || m_buttonControls.Count <= 0)
+                {
+                    return false;
+                }
+
+                if (!m_buttonControls[m_indexButtonActuated].IsActuated())
+                {
+                    return false;
+                }
             }
 
-            var furthest = GeometryHelp.FindFurthestPoints(points);
-            float accuracyOffset = Vector2.Distance(furthest[0], furthest[1])/2 * (100-accuracyPercent) / 100;
-
-            return (Math.Abs(points[0].x - points[points.Count - 1].x) <= accuracyOffset && Math.Abs(points[0].y - points[points.Count - 1].y) <= accuracyOffset);
+            return context.ControlIsActuated();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
@@ -256,12 +267,12 @@ namespace UnityEngine.InputSystem.Interactions
                () => target.durationMax, x => target.durationMax = x, () => InputSystem.settings.defaultCircleTimeMax);
 
             m_AccuracyPercentSetting.Initialize("Accuracy",
-              "Exactness required for the circle to be register(0-100). For optimal results, consider setting a value between 60 and 80%",
+              "Exactness required for the circle to be register(0-100). For optimal results, consider setting a value between 50 and 80%",
               "Accuracy Percent",
               () => target.accuracyPercent, x => target.accuracyPercent = x, () => InputSystem.settings.defaultAccuracyPercent);
 
             m_CircleMethodSetting.Initialize("Circle Algorithm",
-                "Method to be used to calculate if the list of points acquired during the Interaction Process forms a circle",
+                "Method to be used to calculate if the list of points acquired during the Interaction Process forms a circle.",
                 "Circle Method",
                 () => target.circleMethod, x => target.circleMethod = x, Enum.GetNames(typeof(GeometryHelp.CircleMethod)));
         }

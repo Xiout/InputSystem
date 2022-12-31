@@ -270,11 +270,8 @@ namespace UnityEngine.InputSystem.Editor
         }
 
         /// <summary>
-        /// Helper for parameters that have defaults (usually from <see cref="InputSettings"/>).
+        /// Helper for parameters with Enum type.
         /// </summary>
-        /// <remarks>
-        /// Has a bool toggle to switch between default and custom value.
-        /// </remarks>
         internal struct EnumSetting<TEnum> where TEnum : struct
         {
             public void Initialize(string label, string tooltip, string defaultName, Func<TEnum> getValue,
