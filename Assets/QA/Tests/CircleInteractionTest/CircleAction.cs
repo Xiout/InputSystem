@@ -33,7 +33,7 @@ public partial class @CircleAction: IInputActionCollection2, IDisposable
                     ""id"": ""38b8f187-ed24-472e-bbd4-5733060330f2"",
                     ""expectedControlType"": ""Vector2"",
                     ""processors"": """",
-                    ""interactions"": ""Circle(durationMin=0.5,durationMax=5,accuracyPercent=75,circleMethod=2)"",
+                    ""interactions"": ""Circle(durationMin=0.5,durationMax=5,accuracyPercent=75)"",
                     ""initialStateCheck"": true
                 }
             ],
@@ -41,7 +41,7 @@ public partial class @CircleAction: IInputActionCollection2, IDisposable
                 {
                     ""name"": """",
                     ""id"": ""21c2b1d1-b4b8-4ae2-9661-0f90b0b19c36"",
-                    ""path"": ""<Gamepad>/leftStick"",
+                    ""path"": ""<Mouse>/position"",
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
