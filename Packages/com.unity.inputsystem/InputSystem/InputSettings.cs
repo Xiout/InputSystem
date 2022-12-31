@@ -398,6 +398,7 @@ namespace UnityEngine.InputSystem
         /// The default hold time is 0.4 seconds.
         /// </remarks>
         /// <seealso cref="Interactions.HoldInteraction"/>
+        /// <seealso cref="Interactions.CircleInteraction"/>
         public float defaultHoldTime
         {
             get => m_DefaultHoldTime;
@@ -416,7 +417,6 @@ namespace UnityEngine.InputSystem
             get => m_DefaultCircleTimeMax;
             set
             {
-                // ReSharper disable once CompareOfFloatsByEqualityOperator
                 if (m_DefaultCircleTimeMax == value)
                     return;
                 m_DefaultCircleTimeMax = value;
@@ -429,7 +429,6 @@ namespace UnityEngine.InputSystem
             get => m_DefaultAccuracyPercent;
             set
             {
-                // ReSharper disable once CompareOfFloatsByEqualityOperator
                 if (m_DefaultAccuracyPercent == value)
                     return;
                 m_DefaultAccuracyPercent = value;

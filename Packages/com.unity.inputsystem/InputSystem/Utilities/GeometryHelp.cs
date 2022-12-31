@@ -42,31 +42,26 @@ namespace UnityEngine.InputSystem.Utilities
         /// <summary>
         /// Get the circle that is passing by all 3 points given in parameter
         /// </summary>
-        /// <param name="A"></param>
-        /// <param name="B"></param>
-        /// <param name="C"></param>
+        /// <param name="point1"></param>
+        /// <param name="point2"></param>
+        /// <param name="point3"></param>
         /// <returns></returns>
-        public static Circle Get3PointsCircle(Vector2 A, Vector2 B, Vector2 C)
+        public static Circle Get3PointsCircle(Vector2 point1, Vector2 point2, Vector2 point3)
         {
-            float c, f, g;
+            var a = point1.x * (point2.y - point3.y) - point1.y * (point2.x - point3.x) + point2.x * point3.y - point3.x * point2.y;
 
-            f = (-(2 * B.x - 2 * A.x) * Mathf.Pow(C.x, 2)
-                - (2 * B.x - 2 * A.x) * Mathf.Pow(C.y, 2)
-                + 2 * C.x * (Mathf.Pow(B.x, 2) + Mathf.Pow(B.y, 2) - Mathf.Pow(A.x, 2) - Mathf.Pow(A.y, 2))
-                + (2 * B.x - 2 * A.x) * Mathf.Pow(A.x, 2)
-                + (2 * B.x - 2 * A.x) * Mathf.Pow(A.y, 2)
-                + 2 * A.x * (-Mathf.Pow(B.x, 2) - Mathf.Pow(B.y, 2) + Mathf.Pow(A.x, 2) + Mathf.Pow(A.y, 2)))
-                / ((2 * B.x - 2 * A.x) * 2 * C.y - 4 * C.x * B.y + 4 * C.x*A.y - (2 * B.x - 2 * A.x)*A.y+4*A.x*B.y-4*A.x*A.y);
+            var b = (point1.x * point1.x + point1.y * point1.y) * (point3.y - point2.y)
+                  + (point2.x * point2.x + point2.y * point2.y) * (point1.y - point3.y)
+                  + (point3.x * point3.x + point3.y * point3.y) * (point2.y - point1.y);
 
-            g = (-Mathf.Pow(B.x, 2) - Mathf.Pow(B.y, 2)  - 2 * f * B.y + Mathf.Pow(A.x, 2) + Mathf.Pow(A.y, 2) + 2 * f * A.y) / (2 * B.x - 2 * A.x);
+            var c = (point1.x * point1.x + point1.y * point1.y) * (point2.x - point3.x)
+                  + (point2.x * point2.x + point2.y * point2.y) * (point3.x - point1.x)
+                  + (point3.x * point3.x + point3.y * point3.y) * (point1.x - point2.x);
 
-            c = -Mathf.Pow(A.x, 2) - Mathf.Pow(A.y, 2) - 2 * g * A.x - 2 * f * A.y;
-
-            Vector2 center = new Vector2(-g, -f);
-            float radius = Mathf.Sqrt(Mathf.Pow(g, 2) + Mathf.Pow(f, 2) - c);
+            Vector2 center = new Vector2(-b / (2 * a), -c / (2 * a));
+            float radius = Mathf.Sqrt(Mathf.Pow((center.x - point1.x),2) + Mathf.Pow((center.y - point1.y),2));
 
             return new Circle(center, radius);
-
         }
 
         /// <summary>

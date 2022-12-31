@@ -14,21 +14,17 @@ namespace UnityEngine.InputSystem.Interactions
 {
     /// <summary>
     /// Performs the action if the control is pressed and held for at least the
-    /// set duration (which defaults to <see cref="InputSettings.defaultHoldTime"/>).
+    /// set minimal duration (which defaults to <see cref="InputSettings.defaultHoldTime"/>) 
+    /// but less than the maximal duration (which defaults to <see cref="InputSettings.defaultCircleTimeMax"/>
+    /// and form a circle.
     /// </summary>
     /// <remarks>
-    /// The action is started when the control is pressed. If the control is released before the
-    /// set <see cref="duration"/>, the action is canceled. As soon as the hold time is reached,
-    /// the action performs. The action then stays performed until the control is released, at
+    /// The action is started when a control button of the same device is pressed. If the control is released before the
+    /// set <see cref="durationMin"/>, the action is canceled.
+    /// When the hold time is reached, calculate at each value update if the list of points collected form a circle. 
+    /// If yes, the action performs. The action then stays performed until the control is released, at
     /// which point the action cancels.
-    ///
-    /// <example>
-    /// <code>
-    /// // Action that requires A button on gamepad to be held for half a second.
-    /// var action = new InputAction(binding: "&lt;Gamepad&gt;/buttonSouth", interactions: "hold(duration=0.5)");
-    /// </code>
-    /// </example>
-    /// </remarks>
+    /// If after the set <see cref="durationMax"/>, the points collected still does not form a circle, the action is canceled.
 
     #if UNITY_EDITOR
     //Register interaction to the Input Manager
@@ -61,21 +57,6 @@ namespace UnityEngine.InputSystem.Interactions
         public float durationMax;
 
         /// <summary>
-        /// Magnitude threshold that must be crossed by an actuated control for the control to
-        /// be considered pressed.
-        /// </summary>
-        /// <remarks>
-        /// If this is less than or equal to 0 (the default), <see cref="InputSettings.defaultButtonPressPoint"/> is used instead.
-        /// </remarks>
-        /// <seealso cref="InputControl.EvaluateMagnitude()"/>
-        //public float pressPoint;
-
-        /// <summary>
-        /// Maximum offset allowed between a point and its estimation to be consider correct.
-        /// </summary> 
-        //public float accuracyOffset;
-
-        /// <summary>
         /// Exactness requiered for the circle to be register (0-100) 
         /// </summary> 
         /// <remarks>
@@ -83,6 +64,14 @@ namespace UnityEngine.InputSystem.Interactions
         /// To have optimal result, the value should be greater than 60
         /// </remarks>
         public float accuracyPercent;
+
+        /// <summary>
+        /// Define which method is used to calculate if the list of points aquiered during the Interaction Process form a circle
+        /// </summary>
+        /// <remarks>
+        /// <see cref="GeometryHelp.CircleMethod.FurthestPoints"/> give the best results
+        /// </remarks>
+        public GeometryHelp.CircleMethod circleMethod;
 
         private float durationMinOrDefault => durationMin > 0.0 ? durationMin : InputSystem.settings.defaultHoldTime;
         private float durationMaxOrDefault => durationMax > 0.0 ? durationMax : InputSystem.settings.defaultCircleTimeMax;
@@ -171,15 +160,13 @@ namespace UnityEngine.InputSystem.Interactions
                             //Check if the list of point collected over time form a circle, if yes the action is performed
                             if (IsFirstPointLastPoint(m_ListPositionsOverTime))
                             {
-                                if (GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault, GeometryHelp.CircleMethod.ThreePoints))
+                                if (GeometryHelp.IsCircle(m_ListPositionsOverTime, accuracyPercentOrDefault, GeometryHelp.CircleMethod.FurthestPoints))
                                 {
                                     Debug.Log("PERFORM");
                                     context.PerformedAndStayPerformed();
                                     break;
                                 }
                             }
-
-                            //TODO : Implement "CanBeCircle" to define if the points form an incomplete circle. if send false, call context.Canceled();
                         }
                     }
 
@@ -248,30 +235,50 @@ namespace UnityEngine.InputSystem.Interactions
 
 #if UNITY_EDITOR
     /// <summary>
-    /// UI that is displayed when editing <see cref="HoldInteraction"/> in the editor.
+    /// UI that is displayed when editing <see cref="CircleInteraction"/> in the editor.
     /// </summary>
-    internal class CircleInteractionEditor : InputParameterEditor<HoldInteraction>
+    internal class CircleInteractionEditor : InputParameterEditor<CircleInteraction>
     {
         protected override void OnEnable()
         {
-            m_PressPointSetting.Initialize("Press Point",
-                "Float value that an axis control has to cross for it to be considered pressed.",
-                "Default Button Press Point",
-                () => target.pressPoint, v => target.pressPoint = v, () => ButtonControl.s_GlobalDefaultButtonPressPoint);
-            m_DurationSetting.Initialize("Hold Time",
-                "Time (in seconds) that a control has to be held in order for it to register as a hold.",
+            //m_PressPointSetting.Initialize("Press Point",
+            //    "Float value that an axis control has to cross for it to be considered pressed.",
+            //    "Default Button Press Point",
+            //    () => target.pressPoint, v => target.pressPoint = v, () => ButtonControl.s_GlobalDefaultButtonPressPoint);
+            m_MinDurationSetting.Initialize("Minumum Hold Time",
+                "Time (in seconds) that a control has to be held in order to be able to register as a circle.",
                 "Default Hold Time",
-                () => target.duration, x => target.duration = x, () => InputSystem.settings.defaultHoldTime);
+                () => target.durationMin, x => target.durationMin = x, () => InputSystem.settings.defaultHoldTime);
+
+            m_MaxDurationSetting.Initialize("Maximum Hold Time",
+               "Time (in seconds) after which, if the control is still held, the action will not register.",
+               "Default Circle Time Max",
+               () => target.durationMax, x => target.durationMax = x, () => InputSystem.settings.defaultCircleTimeMax);
+
+            m_AccuracyPercentSetting.Initialize("Accuracy",
+              "Exactness required for the circle to be register(0-100). For optimal results, consider setting a value between 60 and 80%",
+              "Accuracy Percent",
+              () => target.accuracyPercent, x => target.accuracyPercent = x, () => InputSystem.settings.defaultAccuracyPercent);
+
+            m_CircleMethodSetting.Initialize("Circle Algorithm",
+                "Method to be used to calculate if the list of points acquired during the Interaction Process forms a circle",
+                "Circle Method",
+                () => target.circleMethod, x => target.circleMethod = x, Enum.GetNames(typeof(GeometryHelp.CircleMethod)));
         }
 
         public override void OnGUI()
         {
-            m_PressPointSetting.OnGUI();
-            m_DurationSetting.OnGUI();
+            m_MinDurationSetting.OnGUI();
+            m_MaxDurationSetting.OnGUI();
+            m_AccuracyPercentSetting.OnGUI();
+            m_CircleMethodSetting.OnGUI();
         }
 
-        private CustomOrDefaultSetting m_PressPointSetting;
-        private CustomOrDefaultSetting m_DurationSetting;
+        private CustomOrDefaultSetting m_MinDurationSetting;
+        private CustomOrDefaultSetting m_MaxDurationSetting;
+        private CustomOrDefaultSetting m_AccuracyPercentSetting;
+        private EnumSetting<GeometryHelp.CircleMethod> m_CircleMethodSetting;
+        //private InputParameterEditor m_CircleMethodSetting;
     }
     #endif
 }

@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -23,6 +24,7 @@ public class PlayerController : MonoBehaviour
 
     private float defaultZCoord2D=0;
     private float accuracyPercent=-1;
+    private GeometryHelp.CircleMethod circleMethod;
 
     void Awake()
     {
@@ -38,7 +40,7 @@ public class PlayerController : MonoBehaviour
         controls.Player.Turn.performed += ctx => OnTurnPerformed(ctx);
         controls.Player.Turn.canceled += ctx => OnTurnCanceled(ctx);
 
-        //Get the accuracyPercent from the interaction
+        //Get the accuracyPercent and circleMethod parameters from the interaction
         string interactionsStr = controls.Player.Turn.interactions;
         string cut = "Circle(";
         int index = interactionsStr.IndexOf(cut);
@@ -49,21 +51,39 @@ public class PlayerController : MonoBehaviour
             index = interactionsStr.IndexOf(")");
             interactionsStr = interactionsStr.Substring(0, interactionsStr.Length-(interactionsStr.Length - index));
 
-            cut = "accuracyPercent=";
-            index = interactionsStr.IndexOf(cut);
-            if(index != -1)
+            var splits = interactionsStr.Split(',');
+            for(int i=0; i< splits.Length; ++i)
             {
-                interactionsStr = interactionsStr.Substring(index + cut.Length);
-                float result = -1;
-
-                if(float.TryParse(interactionsStr, out result))
+                cut = "accuracyPercent=";
+                index = splits[i].IndexOf(cut);
+                if (index != -1)
                 {
-                    accuracyPercent = result;
+                    splits[i] = splits[i].Substring(index + cut.Length);
+                    float result = -1;
+
+                    if (float.TryParse(splits[i], out result))
+                    {
+                        accuracyPercent = result;
+                    }
+                    continue;
+                }
+
+                cut = "circleMethod=";
+                index = splits[i].IndexOf(cut);
+                if (index != -1)
+                {
+                    splits[i] = splits[i].Substring(index + cut.Length);
+                    GeometryHelp.CircleMethod method;
+                    if (Enum.TryParse<GeometryHelp.CircleMethod>(splits[i], out method))
+                    {
+                        circleMethod = method;
+                    }
+                    return;
                 }
             }
+            
         }
         if (accuracyPercent == -1) { accuracyPercent = 90; }
-        Debug.Log($"AccuracyPercent : {accuracyPercent}");
     }
 
     private void OnEnable()
@@ -104,7 +124,7 @@ public class PlayerController : MonoBehaviour
             DrawHelpCircles();
 
             //Get and draw all the incorrect points to ease the see which points wa considered as false;
-            var incorrectPoints = GeometryHelp.GetIncorrectPointsCircle(GesturePoints, accuracyPercent, GeometryHelp.CircleMethod.ThreePoints);
+            var incorrectPoints = GeometryHelp.GetIncorrectPointsCircle(GesturePoints, accuracyPercent, circleMethod);
             for(int i=0; i< incorrectPoints.Count; ++i)
             {
                 Vector3 incorrectPoint = new Vector3(incorrectPoints[i].x, incorrectPoints[i].y, defaultZCoord2D);
@@ -174,7 +194,21 @@ public class PlayerController : MonoBehaviour
         }
         //GeometryHelp.FindFurthestGameObject(GOs);
 
-        var circle = GeometryHelp.Get3PointsCircle(GesturePoints);
+        GeometryHelp.Circle circle = null;
+        switch (circleMethod)
+        {
+            case GeometryHelp.CircleMethod.FurthestPoints:
+                circle = GeometryHelp.GetCircleFurthestPoints(GesturePoints);
+                break;
+            case GeometryHelp.CircleMethod.ThreePoints:
+                circle = GeometryHelp.Get3PointsCircle(GesturePoints);
+                break;
+        }
+
+        if (circle == null)
+        {
+            return;
+        }
 
         Vector3 center = new Vector3(circle.Center.x, circle.Center.y, defaultZCoord2D);
         DrawDebugPoint(center, Prefab_PointGrey);

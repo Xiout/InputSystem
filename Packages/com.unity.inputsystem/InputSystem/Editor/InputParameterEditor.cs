@@ -268,6 +268,56 @@ namespace UnityEngine.InputSystem.Editor
             private GUIContent m_OpenInputSettingsLabel;
             private GUIContent m_HelpBoxText;
         }
+
+        /// <summary>
+        /// Helper for parameters that have defaults (usually from <see cref="InputSettings"/>).
+        /// </summary>
+        /// <remarks>
+        /// Has a bool toggle to switch between default and custom value.
+        /// </remarks>
+        internal struct EnumSetting<TEnum> where TEnum : struct
+        {
+            public void Initialize(string label, string tooltip, string defaultName, Func<TEnum> getValue,
+                Action<TEnum> setValue, string[] options)
+            {
+                m_GetValue = getValue;
+                m_SetValue = setValue;
+                
+                m_ValueLabel = EditorGUIUtility.TrTextContent(label, tooltip);
+                m_HelpBoxText =
+                    EditorGUIUtility.TrTextContent(
+                        $"Uses \"{defaultName}\" set in project-wide input settings.");
+
+                m_options = options;
+            }
+
+            public void OnGUI()
+            {
+                EditorGUILayout.BeginHorizontal();
+                var value = m_GetValue();
+
+                int selectedIndex = m_options.IndexOf(value.ToString());
+                if (selectedIndex < 0)
+                    selectedIndex = 0;
+
+                selectedIndex = EditorGUILayout.Popup(m_ValueLabel, selectedIndex, m_options);
+
+                TEnum newValue;
+                if(Enum.TryParse<TEnum>(m_options[selectedIndex],  out newValue))
+                {
+                    m_SetValue(newValue);
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            private Func<TEnum> m_GetValue;
+            private Action<TEnum> m_SetValue;
+            private GUIContent m_ValueLabel;
+            private GUIContent m_OpenInputSettingsLabel;
+            private GUIContent m_HelpBoxText;
+            private string[] m_options;
+        }
     }
 }
 #endif // UNITY_EDITOR
