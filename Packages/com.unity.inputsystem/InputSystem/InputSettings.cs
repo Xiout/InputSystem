@@ -398,6 +398,7 @@ namespace UnityEngine.InputSystem
         /// The default hold time is 0.4 seconds.
         /// </remarks>
         /// <seealso cref="Interactions.HoldInteraction"/>
+        /// <seealso cref="Interactions.CircleInteraction"/>
         public float defaultHoldTime
         {
             get => m_DefaultHoldTime;
@@ -407,6 +408,30 @@ namespace UnityEngine.InputSystem
                 if (m_DefaultHoldTime == value)
                     return;
                 m_DefaultHoldTime = value;
+                OnChange();
+            }
+        }
+
+        public float defaultCircleTimeMax
+        {
+            get => m_DefaultCircleTimeMax;
+            set
+            {
+                if (m_DefaultCircleTimeMax == value)
+                    return;
+                m_DefaultCircleTimeMax = value;
+                OnChange();
+            }
+        }
+
+        public float defaultAccuracyPercent
+        {
+            get => m_DefaultAccuracyPercent;
+            set
+            {
+                if (m_DefaultAccuracyPercent == value)
+                    return;
+                m_DefaultAccuracyPercent = value;
                 OnChange();
             }
         }
@@ -742,6 +767,8 @@ namespace UnityEngine.InputSystem
         [SerializeField] private float m_DefaultTapTime = 0.2f;
         [SerializeField] private float m_DefaultSlowTapTime = 0.5f;
         [SerializeField] private float m_DefaultHoldTime = 0.4f;
+        [SerializeField] private float m_DefaultCircleTimeMax = 5f;
+        [SerializeField] private float m_DefaultAccuracyPercent = 70.0f;
         [SerializeField] private float m_TapRadius = 5;
         [SerializeField] private float m_MultiTapDelayTime = 0.75f;
         [SerializeField] private bool m_DisableRedundantEventsMerging = false;
